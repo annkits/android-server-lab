@@ -1,3 +1,3 @@
-[submodule "android_app"]
-	path = android_app
+[submodule "VP_HCI"]
+	path = VP_HCI
 	url = https://github.com/annkits/VP_HCI.git
