@@ -1,3 +1,4 @@
 [submodule "VP_HCI"]
 	path = VP_HCI
 	url = https://github.com/annkits/VP_HCI.git
+	    branch = master
