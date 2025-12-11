@@ -1,5 +1,4 @@
 import socket
-import time
 
 HOST = '127.0.0.1'
 PORT = 12345
@@ -14,5 +13,6 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
 
     data = s.recv(1024)
     print(f"Ответ от сервера: {data.decode('utf-8')}")
+
 
 print("Клиент завершил работу")
