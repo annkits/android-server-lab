@@ -1,0 +1,16 @@
+{
+  "OutputFoldersPerTargetSystem": {
+    "Local Machine": [
+      "build"
+    ]
+  },
+  "ExpandedNodes": [
+    "",
+    "\\third_party",
+    "\\third_party\\imgui",
+    "\\third_party\\imgui\\examples",
+    "\\third_party\\imgui\\examples\\example_sdl2_sdlrenderer2"
+  ],
+  "SelectedNode": "\\third_party\\imgui\\examples\\example_sdl2_sdlrenderer2\\example_sdl2_sdlrenderer2.vcxproj",
+  "PreviewInSolutionExplorer": false
+}
