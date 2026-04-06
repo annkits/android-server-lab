@@ -42,6 +42,35 @@
 - Поддержка нескольких сот одновременно (разные цвета линий по PCI)
 - Обработка сигналов завершения (Ctrl+C)
 
+## Структура проекта
+```
+android-server-lab/
+├── src/                    # C++ исходники
+│   ├── main.cpp
+│   ├── server.cpp
+│   ├── gui.cpp
+│   └── shared.h
+├── include/                    
+│   ├── json.hpp
+│   ├── zmq.hpp
+│   └── shared.h
+├── CMakeLists.txt
+├── third_party/            # ImGui, ImPlot
+├── assets/fonts/           # JetBrains Mono
+│
+└── Android-приложение/
+├── app/src/main/java/com/example/myapplication/
+│   ├── MainActivity.kt
+│   ├── CalculatorActivity.kt
+│   ├── MusicPlayerActivity.kt
+│   ├── LocationActivity.kt
+│   ├── TelephonyActivity.kt
+│   ├── SocketsActivity.kt
+│   └── DataCollectorService.kt
+└── ...
+```
+
+
 ## Технологии
 
 **Backend:**
