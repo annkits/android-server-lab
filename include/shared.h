@@ -45,6 +45,23 @@ struct PacketData {
     vector<CellInfo> cells;
 };
 
+struct CellHistory {
+    vector<float> times;          
+    vector<float> rsrp;
+    vector<float> dbm;          
+    vector<float> sinr;            
+    int pci = -1;
+    string label;
+};
+
+struct SignalPlotData {
+    vector<CellHistory> cells;
+    size_t max_points = 300;        
+    float elapsed_time = 0.0f;
+};
+
+extern SignalPlotData rsrp_history;
+
 extern PacketData latest_packet;
 extern vector<PacketData> history;
 

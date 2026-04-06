@@ -38,8 +38,8 @@ void run_gui() {
 
     // Ввод\вывод
     ImGuiIO& io = ImGui::GetIO();
-    ImFont* font_normal = io.Fonts->AddFontFromFileTTF("JetBrainsMono-Medium.ttf", 17.0f, nullptr, io.Fonts->GetGlyphRangesCyrillic());
-    ImFont* font_big = io.Fonts->AddFontFromFileTTF("JetBrainsMono-Bold.ttf", 21.0f, nullptr, io.Fonts->GetGlyphRangesCyrillic());
+    ImFont* font_normal = io.Fonts->AddFontFromFileTTF("../assets/fonts/JetBrainsMono-Medium.ttf", 17.0f, nullptr, io.Fonts->GetGlyphRangesCyrillic());
+    ImFont* font_big = io.Fonts->AddFontFromFileTTF("../assets/fonts/JetBrainsMono-Bold.ttf", 21.0f, nullptr, io.Fonts->GetGlyphRangesCyrillic());
 
     style.FrameRounding = 4.0f;
     style.WindowBorderSize = 0.0f;
@@ -111,7 +111,7 @@ void run_gui() {
         // 3.0) Обработка event'ов (inputs, window resize, mouse moving, etc.);
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
-            std::cout << "Processing some event: "<< event.type << std::endl;
+            // std::cout << "Processing some event: "<< event.type << std::endl;
             ImGui_ImplSDL2_ProcessEvent(&event);
             if (event.type == SDL_QUIT) {
                 global_running = false;
@@ -268,6 +268,76 @@ void run_gui() {
             }
         }
 
+        ImGui::End();
+
+
+
+        ImGui::SetNextWindowPos(ImVec2(50, 380), ImGuiCond_FirstUseEver);
+        ImGui::SetNextWindowSize(ImVec2(950, 300), ImGuiCond_FirstUseEver);
+        ImGui::Begin("RSRP (Reference Signal Received Power)");
+
+        if (ImPlot::BeginPlot("RSRP History", ImVec2(-1, -1))) {
+            ImPlot::SetupAxes("Время (условные единицы)", "RSRP (dBm)");
+            ImPlot::SetupAxisLimits(ImAxis_Y1, -140, -40, ImPlotCond_Always);
+
+            ImPlot::SetupAxisLimits(ImAxis_X1, rsrp_history.elapsed_time - 60, rsrp_history.elapsed_time, ImPlotCond_Once);
+
+            {
+                std::lock_guard<std::mutex> lock(history_mutex);
+                for (auto& cell_hist : rsrp_history.cells) {
+                    if (!cell_hist.times.empty()) {
+                        ImPlot::PlotLine(cell_hist.label.c_str(), cell_hist.times.data(), cell_hist.rsrp.data(), (int)cell_hist.times.size());
+                    }
+                }
+            }
+            ImPlot::EndPlot();
+        }
+        ImGui::End();
+
+
+        ImGui::SetNextWindowPos(ImVec2(50, 700), ImGuiCond_FirstUseEver);
+        ImGui::SetNextWindowSize(ImVec2(950, 300), ImGuiCond_FirstUseEver);
+        ImGui::Begin("RSSI / dBm");
+
+        if (ImPlot::BeginPlot("dBm History", ImVec2(-1, -1))) {
+            ImPlot::SetupAxes("Время (условные единицы)", "Сигнал (dBm)");
+            ImPlot::SetupAxisLimits(ImAxis_Y1, -140, -40, ImPlotCond_Always);
+
+            ImPlot::SetupAxisLimits(ImAxis_X1, rsrp_history.elapsed_time - 60, rsrp_history.elapsed_time, ImPlotCond_Once);
+
+            {
+                std::lock_guard<std::mutex> lock(history_mutex);
+                for (auto& cell_hist : rsrp_history.cells) {
+                    if (!cell_hist.times.empty()) {
+                        ImPlot::PlotLine(cell_hist.label.c_str(), cell_hist.times.data(), cell_hist.dbm.data(), (int)cell_hist.times.size());
+                    }
+                }
+            }
+            ImPlot::EndPlot();
+        }
+        ImGui::End();
+
+
+        ImGui::SetNextWindowPos(ImVec2(50, 1020), ImGuiCond_FirstUseEver);
+        ImGui::SetNextWindowSize(ImVec2(950, 300), ImGuiCond_FirstUseEver);
+        ImGui::Begin("SINR");
+
+        if (ImPlot::BeginPlot("SINR History", ImVec2(-1, -1))) {
+            ImPlot::SetupAxes("Время (условные единицы)", "SINR (dB)");
+            ImPlot::SetupAxisLimits(ImAxis_Y1, -20, 40, ImPlotCond_Always);
+
+            ImPlot::SetupAxisLimits(ImAxis_X1, rsrp_history.elapsed_time - 60, rsrp_history.elapsed_time, ImPlotCond_Once);
+
+            {
+                std::lock_guard<std::mutex> lock(history_mutex);
+                for (auto& cell_hist : rsrp_history.cells) {
+                    if (!cell_hist.times.empty()) {
+                        ImPlot::PlotLine(cell_hist.label.c_str(), cell_hist.times.data(), cell_hist.sinr.data(), (int)cell_hist.times.size());
+                    }
+                }
+            }
+            ImPlot::EndPlot();
+        }
         ImGui::End();
 
         // 3.3) Отправляем на рендер;

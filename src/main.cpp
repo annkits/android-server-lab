@@ -21,6 +21,7 @@
 using json = nlohmann::json;
 using namespace std;
 
+SignalPlotData rsrp_history;
 PacketData latest_packet;
 vector<PacketData> history;
 mutex history_mutex;

@@ -11,6 +11,7 @@ set(INCLUDE_DIR ${PROJECT_SOURCE_DIR}/include)
 find_package(SDL2 REQUIRED)
 find_package(OpenGL REQUIRED)
 find_package(GLEW REQUIRED)
+find_package(PostgreSQL REQUIRED)
 
 include_directories(${SDL2_INCLUDE_DIRS})
 include_directories(${INCLUDE_DIR})
@@ -52,6 +53,7 @@ target_include_directories(backend PRIVATE
     ${SDL2_INCLUDE_DIRS}
     ${GLEW_INCLUDE_DIRS}
     ${ZMQ_INCLUDE_DIRS}
+    ${PostgreSQL_INCLUDE_DIRS}
 )
 
 target_link_libraries(backend PRIVATE
@@ -62,4 +64,5 @@ target_link_libraries(backend PRIVATE
     ${SDL2_LIBRARIES} 
     ${OPENGL_LIBRARIES} 
     ${GLEW_LIBRARIES}
+    PostgreSQL::PostgreSQL
 )
