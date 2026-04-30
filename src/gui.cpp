@@ -11,18 +11,18 @@
 #include "imgui.h"
 #include "implot.h"
 #include "shared.h"
+#include "osm_map.h"
 
 void run_gui() {
-    // 1) Инициализация SDL
     SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER);
     SDL_Window* window = SDL_CreateWindow(
         "Backend start", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
         1024, 768, SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE);
     SDL_GLContext gl_context = SDL_GL_CreateContext(window);
 
-    // 2) Инициализация контекста Dear Imgui
     ImGui::CreateContext();
     ImPlot::CreateContext();
+    init_osm_map();
     auto& style = ImGui::GetStyle();
     
     style.WindowRounding    = 6.0f;
@@ -36,10 +36,9 @@ void run_gui() {
     style.FramePadding      = ImVec2(8, 5);
     style.ItemSpacing       = ImVec2(8, 6);
 
-    // Ввод\вывод
     ImGuiIO& io = ImGui::GetIO();
-    ImFont* font_normal = io.Fonts->AddFontFromFileTTF("../assets/fonts/JetBrainsMono-Medium.ttf", 17.0f, nullptr, io.Fonts->GetGlyphRangesCyrillic());
-    ImFont* font_big = io.Fonts->AddFontFromFileTTF("../assets/fonts/JetBrainsMono-Bold.ttf", 21.0f, nullptr, io.Fonts->GetGlyphRangesCyrillic());
+    ImFont* font_normal = io.Fonts->AddFontFromFileTTF("assets/fonts/JetBrainsMono-Medium.ttf", 17.0f, nullptr, io.Fonts->GetGlyphRangesCyrillic());
+    ImFont* font_big = io.Fonts->AddFontFromFileTTF("assets/fonts/JetBrainsMono-Bold.ttf", 21.0f, nullptr, io.Fonts->GetGlyphRangesCyrillic());
 
     style.FrameRounding = 4.0f;
     style.WindowBorderSize = 0.0f;
@@ -100,25 +99,19 @@ void run_gui() {
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Включить Gamepad Controls
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;         // Включить Docking
 
-    // 2.1) Привязка Imgui к SDL2 и OpenGl backend'ам
     ImGui_ImplSDL2_InitForOpenGL(window, gl_context);
     ImGui_ImplOpenGL3_Init("#version 330");
 
-    // 3) Игра началась
-    // bool running = true;
     while (global_running) {
 
-        // 3.0) Обработка event'ов (inputs, window resize, mouse moving, etc.);
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
-            // std::cout << "Processing some event: "<< event.type << std::endl;
             ImGui_ImplSDL2_ProcessEvent(&event);
             if (event.type == SDL_QUIT) {
                 global_running = false;
             }
         }
 
-        // 3.1) Начинаем создавать новый фрейм;
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplSDL2_NewFrame();
         ImGui::NewFrame();
@@ -283,7 +276,7 @@ void run_gui() {
             ImPlot::SetupAxisLimits(ImAxis_X1, rsrp_history.elapsed_time - 60, rsrp_history.elapsed_time, ImPlotCond_Once);
 
             {
-                std::lock_guard<std::mutex> lock(history_mutex);
+                lock_guard<mutex> lock(history_mutex);
                 for (auto& cell_hist : rsrp_history.cells) {
                     if (!cell_hist.times.empty()) {
                         ImPlot::PlotLine(cell_hist.label.c_str(), cell_hist.times.data(), cell_hist.rsrp.data(), (int)cell_hist.times.size());
@@ -306,7 +299,7 @@ void run_gui() {
             ImPlot::SetupAxisLimits(ImAxis_X1, rsrp_history.elapsed_time - 60, rsrp_history.elapsed_time, ImPlotCond_Once);
 
             {
-                std::lock_guard<std::mutex> lock(history_mutex);
+                lock_guard<mutex> lock(history_mutex);
                 for (auto& cell_hist : rsrp_history.cells) {
                     if (!cell_hist.times.empty()) {
                         ImPlot::PlotLine(cell_hist.label.c_str(), cell_hist.times.data(), cell_hist.dbm.data(), (int)cell_hist.times.size());
@@ -329,7 +322,7 @@ void run_gui() {
             ImPlot::SetupAxisLimits(ImAxis_X1, rsrp_history.elapsed_time - 60, rsrp_history.elapsed_time, ImPlotCond_Once);
 
             {
-                std::lock_guard<std::mutex> lock(history_mutex);
+                lock_guard<mutex> lock(history_mutex);
                 for (auto& cell_hist : rsrp_history.cells) {
                     if (!cell_hist.times.empty()) {
                         ImPlot::PlotLine(cell_hist.label.c_str(), cell_hist.times.data(), cell_hist.sinr.data(), (int)cell_hist.times.size());
@@ -340,7 +333,12 @@ void run_gui() {
         }
         ImGui::End();
 
-        // 3.3) Отправляем на рендер;
+        ImGui::SetNextWindowPos(ImVec2(350, 80), ImGuiCond_FirstUseEver);
+        ImGui::SetNextWindowSize(ImVec2(1100, 820), ImGuiCond_FirstUseEver);
+
+        bool map_window_open = true;
+        render_osm_map_implot();  
+
         ImGui::Render();
         glClearColor(0.06f, 0.06f, 0.08f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
@@ -349,7 +347,6 @@ void run_gui() {
         SDL_GL_SwapWindow(window);
     }
 
-    // 4) Закрываем приложение безопасно.
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplSDL2_Shutdown();
     ImPlot::DestroyContext();

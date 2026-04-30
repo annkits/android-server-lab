@@ -5,6 +5,7 @@
 #include <mutex>        
 #include <atomic>
 #include <vector>
+#include <GL/glew.h>
 
 using namespace std;
 
@@ -26,6 +27,9 @@ struct CellInfo {
     int rsrp;
     int rsrq;
     int sinr;
+
+    int earfcn = 0;            
+    int nrarfcn = 0;
 
     int timing_advance;
 

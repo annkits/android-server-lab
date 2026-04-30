@@ -17,6 +17,8 @@
 #include "imgui.h"
 #include "implot.h"
 #include "shared.h"
+#include "curl_utils.h"
+#include "osm_map.h"
 
 using json = nlohmann::json;
 using namespace std;

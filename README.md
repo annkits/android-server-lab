@@ -39,6 +39,12 @@
     - RSRP (Reference Signal Received Power)
     - dBm / RSSI (общая мощность сигнала)
     - SINR (Signal to Interference plus Noise Ratio)
+  - **Интерактивная карта OpenStreetMap**:
+    - Отображение трека передвижения
+    - Поддержка зума и панорамирования
+    - Автоматическая загрузка тайлов с OSM сервера
+    - Кэширование тайлов на диск
+    - Асинхронная загрузка в фоновых потоках
 - Поддержка нескольких сот одновременно (разные цвета линий по PCI)
 - Обработка сигналов завершения (Ctrl+C)
 
@@ -49,6 +55,18 @@ android-server-lab/
 │   ├── main.cpp
 │   ├── server.cpp
 │   ├── gui.cpp
+│   ├── osm_map.cpp
+│   ├── map.cpp
+│   ├── curl_utils.cpp
+│   ├── tile_manager.cpp
+│   └── shared.h
+├── include/                    
+│   ├── json.hpp
+│   ├── zmq.hpp
+│   ├── osm_map.h
+│   ├── curl_utils.h
+│   ├── tile_manager.h
+│   ├── stb_image.h
 │   └── shared.h
 ├── CMakeLists.txt
 ├── third_party/            # ImGui, ImPlot
@@ -76,6 +94,8 @@ android-server-lab/
 - libpq (PostgreSQL)
 - Dear ImGui + ImPlot
 - SDL2 + OpenGL
+- libcurl
+- STB Image
 
 **Android:**
 - Kotlin

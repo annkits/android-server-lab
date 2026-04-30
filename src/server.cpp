@@ -10,6 +10,7 @@
 #include <csignal>
 
 #include "shared.h"
+#include "osm_map.h"
 #include <zmq.hpp>
 #include <json.hpp>
 #include <libpq-fe.h>
@@ -34,38 +35,44 @@ bool init_database() {
     cout << "Подключено к базе данных PostgreSQL\n";
     
     const char* create_table = R"(
-        CREATE TABLE IF NOT EXISTS cell_measurements (
-            id SERIAL PRIMARY KEY,
-            packet_id INTEGER NOT NULL,
-            timestamp TIMESTAMP NOT NULL,
-            
-            latitude DOUBLE PRECISION,
-            longitude DOUBLE PRECISION,
-            altitude DOUBLE PRECISION,
-            accuracy DOUBLE PRECISION,
-            
-            cell_type VARCHAR(10) NOT NULL,
-            registered BOOLEAN,
-            
-            dbm INTEGER,
-            level INTEGER,
-            
-            rsrp INTEGER,      -- LTE: rsrp, NR: ssRsrp
-            rsrq INTEGER,      -- LTE: rsrq, NR: ssRsrq
-            sinr INTEGER,      -- LTE: rssnr, NR: ssSinr
-            
-            timing_advance INTEGER,
-            
-            pci INTEGER,
-            ci BIGINT,
-            tac INTEGER,
-            mcc VARCHAR(10),
-            mnc VARCHAR(10),
-            operator_name VARCHAR(100),
-            
-            earfcn INTEGER,    -- только для LTE
-            nrarfcn INTEGER    -- только для NR
-        );
+    CREATE TABLE IF NOT EXISTS cell_measurements (
+        id SERIAL PRIMARY KEY,
+        packet_id INTEGER NOT NULL,
+        timestamp TIMESTAMP NOT NULL,
+        
+        latitude DOUBLE PRECISION,
+        longitude DOUBLE PRECISION,
+        altitude DOUBLE PRECISION,
+        accuracy DOUBLE PRECISION,
+        
+        cell_type VARCHAR(10) NOT NULL,
+        registered BOOLEAN,
+        
+        dbm INTEGER,
+        level INTEGER,
+        
+        rsrp INTEGER,
+        rsrq INTEGER,
+        sinr INTEGER,
+        
+        timing_advance INTEGER,
+        
+        pci INTEGER,
+        ci BIGINT,
+        tac INTEGER,
+        mcc VARCHAR(10),
+        mnc VARCHAR(10),
+        operator_name VARCHAR(100),
+        
+        earfcn INTEGER,
+        nrarfcn INTEGER,
+        
+        CONSTRAINT unique_measurement UNIQUE (packet_id, ci, timestamp)
+    );
+    
+    CREATE INDEX IF NOT EXISTS idx_packet_id ON cell_measurements(packet_id);
+    CREATE INDEX IF NOT EXISTS idx_timestamp ON cell_measurements(timestamp);
+    CREATE INDEX IF NOT EXISTS idx_pci ON cell_measurements(pci);
     )";
     
     PGresult* res = PQexec(db_conn, create_table);
@@ -80,7 +87,7 @@ bool init_database() {
     return true;
 }
 
-bool insert_cell_data(int packet_id, const std::string& timestamp, const LocationInfo& loc, const CellInfo& cell) {
+bool insert_cell_data(int packet_id, const string& timestamp_str, const LocationInfo& loc, const CellInfo& cell) {
     if (!db_conn) return false;
 
     const char* query = R"(
@@ -88,31 +95,43 @@ bool insert_cell_data(int packet_id, const std::string& timestamp, const Locatio
         (packet_id, timestamp, latitude, longitude, altitude, accuracy,
          cell_type, registered, dbm, level, rsrp, rsrq, sinr, timing_advance,
          pci, ci, tac, mcc, mnc, operator_name, earfcn, nrarfcn)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
-                $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
+        VALUES ($1, to_timestamp($2::bigint / 1000.0), $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
+        ON CONFLICT (packet_id, ci, timestamp) 
+        DO NOTHING;  
     )";
 
     char packet_id_str[32];
     snprintf(packet_id_str, sizeof(packet_id_str), "%d", packet_id);
 
+    string ts_ms_str;
+    bool is_milliseconds = true;
+
+    if (timestamp_str.find('-') != string::npos) {
+        auto now = chrono::system_clock::now();
+        auto ms = chrono::duration_cast<chrono::milliseconds>(now.time_since_epoch()).count();
+        ts_ms_str = to_string(ms);
+    } else {
+        ts_ms_str = timestamp_str;
+    }
+
     const char* paramValues[22] = {
         packet_id_str,
-        timestamp.c_str(),
-        std::to_string(loc.latitude).c_str(),
-        std::to_string(loc.longitude).c_str(),
-        std::to_string(loc.altitude).c_str(),
-        std::to_string(loc.accuracy).c_str(),
+        ts_ms_str.c_str(),
+        to_string(loc.latitude).c_str(),
+        to_string(loc.longitude).c_str(),
+        to_string(loc.altitude).c_str(),
+        to_string(loc.accuracy).c_str(),
         cell.type.c_str(),
         cell.registered ? "true" : "false",
-        std::to_string(cell.dbm).c_str(),
-        std::to_string(cell.level).c_str(),
-        std::to_string(cell.rsrp).c_str(),
-        std::to_string(cell.rsrq).c_str(),
-        std::to_string(cell.sinr).c_str(),
-        std::to_string(cell.timing_advance).c_str(),
-        std::to_string(cell.pci).c_str(),
-        std::to_string(cell.ci).c_str(),
-        std::to_string(cell.tac).c_str(),
+        to_string(cell.dbm).c_str(),
+        to_string(cell.level).c_str(),
+        to_string(cell.rsrp).c_str(),
+        to_string(cell.rsrq).c_str(),
+        to_string(cell.sinr).c_str(),
+        to_string(cell.timing_advance).c_str(),
+        to_string(cell.pci).c_str(),
+        to_string(cell.ci).c_str(),
+        to_string(cell.tac).c_str(),
         cell.mcc.c_str(),
         cell.mnc.c_str(),
         cell.operator_name.c_str(),
@@ -120,8 +139,7 @@ bool insert_cell_data(int packet_id, const std::string& timestamp, const Locatio
         "0"         // nrarfcn
     };
 
-    PGresult* res = PQexecParams(db_conn, query,
-                                 22, nullptr, paramValues, nullptr, nullptr, 0);
+    PGresult* res = PQexecParams(db_conn, query, 22, nullptr, paramValues, nullptr, nullptr, 0);
 
     if (PQresultStatus(res) != PGRES_COMMAND_OK) {
         cerr << "Ошибка вставки в БД: " << PQerrorMessage(db_conn) << endl;
@@ -133,125 +151,237 @@ bool insert_cell_data(int packet_id, const std::string& timestamp, const Locatio
     return true;
 }
 
-bool load_data(const std::string& filename) {
-    std::ifstream file(filename);
+bool load_data(const string& filename) {
+    ifstream file(filename);
     if (!file.is_open()) {
-        std::cerr << "Не найден файл: " << filename << "\n";
+        cerr << "Не найден файл: " << filename << "\n";
         return false;
     }
 
-    json j;
-    try {
-        file >> j;
-    } catch (...) {
-        std::cerr << "Ошибка чтения JSON файла\n";
-        return false;
-    }
+    cout << "Загрузка данных из " << filename << "...\n";
 
-    if (!j.is_array()) {
-        std::cerr << "Файл не является массивом!\n";
-        return false;
-    }
+    string content((istreambuf_iterator<char>(file)), istreambuf_iterator<char>());
 
-    std::cout << "Загружаю " << j.size() << " записей...\n";
+    string json_array = "[";
+    bool first = true;
+    size_t pos = 0;
 
-    {
-        std::lock_guard<std::mutex> lock(history_mutex);
+    while (true) {
+        size_t start = content.find('{', pos);
+        if (start == string::npos) break;
 
-        for (const auto& item : j) {
-            try {
-                PacketData p;
-                p.id = history.size() + 1;
+        int depth = 0;
+        size_t end = start;
 
-                long long tm = 0;
-                if (item.contains("time") && !item["time"].is_null()) {
-                    tm = item["time"].get<long long>();
-                }
-                p.timestamp = std::to_string(tm);
-
-                p.location.longitude = item.value("longitude", 0.0f);
-                p.location.latitude  = item.value("latitude",  0.0f);
-                p.location.altitude  = item.value("altitude",  0.0f);
-                p.location.accuracy  = item.value("accuracy",  0.0f);
-                p.location.time      = p.timestamp;
-
-                CellInfo cell;
-                cell.type = "LTE";
-
-                std::string cell_str = item.value("cell", "");
-
-                if (cell_str.find("rsrp=") != std::string::npos) {
-                    size_t pos = cell_str.find("rsrp=");
-                    std::string substr = cell_str.substr(pos + 5);
-                    size_t end = substr.find_first_not_of("0123456789-");
-                    if (end != std::string::npos) {
-                        substr = substr.substr(0, end);
-                    }
-                    try {
-                        cell.rsrp = std::stoi(substr);
-                        cell.dbm  = cell.rsrp;       
-                    } catch (...) {
-                        cell.rsrp = 0;
-                        cell.dbm  = 0;
-                    }
-                }
-
-                if (cell_str.find("mPci=") != std::string::npos) {
-                    size_t pos = cell_str.find("mPci=");
-                    std::string substr = cell_str.substr(pos + 5);
-                    size_t end = substr.find_first_not_of("0123456789-");
-                    if (end != std::string::npos) {
-                        substr = substr.substr(0, end);
-                    }
-                    try {
-                        cell.pci = std::stoi(substr);
-                    } catch (...) {
-                        cell.pci = -1;
-                    }
-                }
-
-                p.cells.push_back(cell);
-
-                history.push_back(p);
-
-                float t = rsrp_history.elapsed_time + 1.0f;
-                rsrp_history.elapsed_time = t;
-
-                if (cell.rsrp != 0 && cell.pci >= 0) {
-                    auto it = std::find_if(rsrp_history.cells.begin(), rsrp_history.cells.end(),
-                        [pci = cell.pci](const CellHistory& ch){ return ch.pci == pci; });
-
-                    CellHistory* hist;
-                    if (it == rsrp_history.cells.end()) {
-                        CellHistory newh;
-                        newh.pci = cell.pci;
-                        newh.label = "PCI " + std::to_string(cell.pci);
-                        rsrp_history.cells.push_back(std::move(newh));
-                        hist = &rsrp_history.cells.back();
-                    } else {
-                        hist = &(*it);
-                    }
-
-                    hist->times.push_back(t);
-                    hist->rsrp.push_back(static_cast<float>(cell.rsrp));
-
-                    if (hist->times.size() > rsrp_history.max_points) {
-                        hist->times.erase(hist->times.begin());
-                        hist->rsrp.erase(hist->rsrp.begin());
-                    }
+        for (; end < content.size(); ++end) {
+            if (content[end] == '{') depth++;
+            else if (content[end] == '}') {
+                depth--;
+                if (depth == 0) {
+                    end++;
+                    break;
                 }
             }
-            catch (const json::exception& e) {
-                std::cerr << "Ошибка парсинга записи #" << (history.size() + 1) << "\n";
-                std::cerr << "Сообщение: " << e.what() << "\n";
-                std::cerr << "Проблемная запись:\n" << item.dump(2) << "\n\n";
-                continue;
+        }
+
+        if (depth != 0) break;
+
+        if (!first) json_array += ",";
+        json_array += content.substr(start, end - start);
+        first = false;
+        pos = end;
+    }
+    json_array += "]";
+
+    json data;
+    try {
+        data = json::parse(json_array);
+    } catch (const exception& e) {
+        cerr << "Ошибка парсинга JSON: " << e.what() << "\n";
+        return false;
+    }
+
+    size_t loaded = 0;
+    size_t skipped_no_location = 0;
+
+    lock_guard<mutex> lock(history_mutex);
+
+    for (const auto& item : data) {
+
+        if (item.contains("error")) {
+            skipped_no_location++;
+            continue;
+        }
+
+        if (!item.contains("latitude") || !item.contains("longitude")) {
+            skipped_no_location++;
+            continue;
+        }
+
+        PacketData p;
+        p.id = static_cast<int>(history.size() + 1);
+
+        if (item.contains("time")) {
+            if (item["time"].is_number())
+                p.timestamp = to_string(item["time"].get<long long>());
+            else if (item["time"].is_string())
+                p.timestamp = item["time"].get<string>();
+        }
+
+        try {
+            p.location.latitude = item["latitude"].get<float>();
+            p.location.longitude = item["longitude"].get<float>();
+
+            if (item.contains("altitude"))
+                p.location.altitude = item["altitude"].get<float>();
+
+            if (item.contains("accuracy"))
+                p.location.accuracy = item["accuracy"].get<float>();
+
+            p.location.time = p.timestamp;
+
+        } catch (...) {
+            skipped_no_location++;
+            continue;
+        }
+
+        if (item.contains("cell") && item["cell"].is_string()) {
+            string cell_str = item["cell"];
+
+            CellInfo cell{};
+            cell.type = "LTE";
+            cell.pci = -1;
+            cell.rsrp = 0;
+            cell.dbm = 0;
+
+            auto extract_int = [&](const string& key) -> int {
+                size_t p = cell_str.find(key);
+                if (p == string::npos) return 0;
+
+                string val = cell_str.substr(p + key.size());
+                size_t end = val.find_first_not_of("0123456789-");
+                if (end != string::npos) val = val.substr(0, end);
+
+                try { 
+                    return stoi(val); 
+                } catch (...) { 
+                    return 0; 
+                }
+            };
+
+            cell.rsrp = extract_int("rsrp=");
+            if (cell.rsrp == 0) cell.rsrp = extract_int("rssi=");   
+
+            cell.dbm  = (cell.rsrp != 0) ? cell.rsrp : extract_int("rssi=");
+            cell.rsrq = extract_int("rsrq=");
+            cell.sinr = extract_int("rssnr=") ? extract_int("rssnr=") : extract_int("sinr=");
+            cell.timing_advance = extract_int("ta=");
+
+            cell.pci = extract_int("mPci=");
+            if (cell.pci == 0 || cell.pci == -1) {
+                cell.pci = extract_int("Pci=");  
+            }
+            if (cell.pci == 0) cell.pci = -1;    
+            if (cell.rsrp != 0 || cell.pci != -1) {
+                p.cells.push_back(cell);
+            }
+        }
+
+        history.push_back(move(p));
+        loaded++;
+
+        float t = rsrp_history.elapsed_time + 1.0f;
+        rsrp_history.elapsed_time = t;
+
+        for (const auto& cell : p.cells) {
+            if (cell.rsrp == 0) continue;
+
+            int key = (cell.pci >= 0) ? cell.pci : p.id;
+
+            auto it = find_if(rsrp_history.cells.begin(), rsrp_history.cells.end(),
+                [key](const CellHistory& ch) { return ch.pci == key; });
+
+            CellHistory* hist;
+            if (it == rsrp_history.cells.end()) {
+                CellHistory new_hist;
+                new_hist.pci = key;
+                new_hist.label = (cell.pci >= 0) 
+                    ? "PCI " + to_string(cell.pci)
+                    : "Unknown " + to_string(p.id);
+
+                rsrp_history.cells.push_back(move(new_hist));
+                hist = &rsrp_history.cells.back();
+            } else {
+                hist = &(*it);
+            }
+
+            hist->times.push_back(t);
+            hist->rsrp.push_back((float)cell.rsrp);
+            hist->dbm.push_back((float)cell.dbm);
+            hist->sinr.push_back((float)cell.sinr);
+        
+
+            if (hist->times.size() > rsrp_history.max_points) {
+                hist->times.erase(hist->times.begin());
+                hist->rsrp.erase(hist->rsrp.begin());
+                hist->dbm.erase(hist->dbm.begin());
+                hist->sinr.erase(hist->sinr.begin());
             }
         }
     }
 
-    std::cout << "Данные загружены (" << history.size() << " записей)\n";
-    return true;
+    cout << "Загружено: " << loaded << "\n";
+    cout << "Пропущено (без координат): " << skipped_no_location << "\n";
+    cout << "Всего записей в истории: " << history.size() << "\n";
+    cout << "Всего сот в графиках: " << rsrp_history.cells.size() << "\n";
+
+    osm_map.track_points.clear();
+
+    for (const auto& p : history) {
+        if (abs(p.location.latitude  - 37.421997) < 0.001 &&
+            abs(p.location.longitude - (-122.084)) < 0.001) {
+            continue;   
+        }
+
+        if (p.location.latitude != 0.0f && p.location.longitude != 0.0f) {
+            osm_map.track_points.push_back(p.location);
+        }
+    }
+
+    cout << "Для карты собрано трековых точек: " << osm_map.track_points.size() << "\n";
+
+    if (!osm_map.track_points.empty()) {
+        osm_map.center_lat = osm_map.track_points[0].latitude;
+        osm_map.center_lon = osm_map.track_points[0].longitude;
+        cout << "[OSM] Центр карты установлен на первую точку: "
+             << osm_map.center_lat << ", " << osm_map.center_lon << "\n";
+    }
+
+    if (db_conn) {
+        cout << "Сохранение загруженных данных из data.json в PostgreSQL...\n";
+        
+        int saved_count = 0;
+        int skipped_count = 0;
+        
+        for (const auto& p : history) {
+            for (const auto& cell : p.cells) {
+                bool ok = insert_cell_data(p.id, p.timestamp, p.location, cell);
+                if (ok) saved_count++;
+                else skipped_count++;
+            }
+        }
+        
+        cout << "В базу сохранено новых записей: " << saved_count << "\n";
+        if (skipped_count > 0) {
+            cout << "Пропущено (уже существуют): " << skipped_count << "\n";
+        }
+    }
+
+    cout << "Загрузка из data.json завершена.\n";
+
+    update_visible_tiles();
+
+    return loaded > 0;
 }
 
 void run_server() {
@@ -261,6 +391,15 @@ void run_server() {
         }
 
         load_data("data.json");
+
+        if (!history.empty()) {
+            {
+                lock_guard<mutex> lock(latest_packet_mutex);
+                latest_packet = history.back();
+            }
+            update_visible_tiles();
+            cout << "[OSM] Карта обновлена по данным из data.json\n";
+        }
 
         zmq::context_t context(1);
         zmq::socket_t socket(context, zmq::socket_type::rep);
@@ -286,7 +425,8 @@ void run_server() {
 
                 PacketData packet;
                 packet.id = next_id++;
-                packet.timestamp = timestamp;
+                auto now_ms = chrono::duration_cast<chrono::milliseconds>(chrono::system_clock::now().time_since_epoch()).count();
+                packet.timestamp = to_string(now_ms);
 
                 try {
                     json parsed = json::parse(message);
@@ -369,6 +509,8 @@ void run_server() {
                 latest_packet = packet;
                 }
 
+                update_visible_tiles();
+
                 {
                 lock_guard<mutex> lock(history_mutex);
                 history.push_back(packet);
@@ -385,15 +527,15 @@ void run_server() {
                 }
 
                 {
-                    std::lock_guard<std::mutex> lock(history_mutex);
+                    lock_guard<mutex> lock(history_mutex);
 
                     rsrp_history.elapsed_time += 1.0f;  
                     float t = rsrp_history.elapsed_time;
 
                     for (const auto& cell : packet.cells) {
-                        if (cell.pci < 0) continue;
+                        if (cell.pci < 0 && cell.ci <= 0) continue;
 
-                        auto it = std::find_if(
+                        auto it = find_if(
                             rsrp_history.cells.begin(),
                             rsrp_history.cells.end(),
                             [pci = cell.pci](const CellHistory& ch) { return ch.pci == pci; }
@@ -403,11 +545,11 @@ void run_server() {
                         if (it == rsrp_history.cells.end()) {
                             CellHistory new_hist;
                             new_hist.pci = cell.pci;
-                            new_hist.label = "PCI " + std::to_string(cell.pci);
+                            new_hist.label = "PCI " + to_string(cell.pci);
                             if (!cell.mcc.empty() && !cell.mnc.empty()) {
                                 new_hist.label += " (" + cell.mcc + "-" + cell.mnc + ")";
                             }
-                            rsrp_history.cells.push_back(std::move(new_hist));
+                            rsrp_history.cells.push_back(move(new_hist));
                             hist = &rsrp_history.cells.back();
                         } else {
                             hist = &(*it);
@@ -451,10 +593,10 @@ void run_server() {
         cout << "Поток сервера завершает работу\n";
     }
     catch (const zmq::error_t& e) {
-        cerr << "ZQM-ошибка: " << e.what()<< " (" << e.num() << ")" << std::endl;
+        cerr << "ZQM-ошибка: " << e.what()<< " (" << e.num() << ")" << endl;
     }
     catch (const exception& e) {
-        cerr << "Ошибка: " << e.what() << std::endl;
+        cerr << "Ошибка: " << e.what() << endl;
     }
     catch (...) {
         if (db_conn) PQfinish(db_conn);

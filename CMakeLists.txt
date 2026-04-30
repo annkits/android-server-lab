@@ -12,12 +12,15 @@ find_package(SDL2 REQUIRED)
 find_package(OpenGL REQUIRED)
 find_package(GLEW REQUIRED)
 find_package(PostgreSQL REQUIRED)
+find_package(CURL REQUIRED)
 
 include_directories(${SDL2_INCLUDE_DIRS})
 include_directories(${INCLUDE_DIR})
 include_directories(${GLEW_INCLUDE_DIRS})
+include_directories(${CURL_INCLUDE_DIRS})
 
 find_package(PkgConfig REQUIRED)
+find_package(CURL REQUIRED)
 pkg_check_modules(ZMQ REQUIRED IMPORTED_TARGET libzmq)
 find_package(nlohmann_json 3.11 REQUIRED)
 
@@ -46,6 +49,10 @@ add_executable(backend
     ${SRC_DIR}/main.cpp
     ${SRC_DIR}/server.cpp
     ${SRC_DIR}/gui.cpp
+    ${SRC_DIR}/curl_utils.cpp    
+    ${SRC_DIR}/osm_map.cpp
+    ${SRC_DIR}/tile_manager.cpp
+    ${SRC_DIR}/map.cpp
     )
 
 target_include_directories(backend PRIVATE
@@ -54,6 +61,8 @@ target_include_directories(backend PRIVATE
     ${GLEW_INCLUDE_DIRS}
     ${ZMQ_INCLUDE_DIRS}
     ${PostgreSQL_INCLUDE_DIRS}
+    ${CURL_INCLUDE_DIRS} 
+    # include
 )
 
 target_link_libraries(backend PRIVATE
@@ -65,4 +74,5 @@ target_link_libraries(backend PRIVATE
     ${OPENGL_LIBRARIES} 
     ${GLEW_LIBRARIES}
     PostgreSQL::PostgreSQL
+    ${CURL_LIBRARIES}
 )
